@@ -210,13 +210,13 @@ def main():
 
     # Add noise and do a simple denoising task
     noised = add_noise(img)
-    denoised = simple_denoise(noised, kernel_size=5)
+    denoised = simple_denoise(noised, kernel_size=3)
     show_rgb_channels(noised, 'Image with Gaussian noise')
     show_rgb_channels(denoised, 'Image denoised with Median filter')
 
     # Apply blurring and add noise and do a simple deblurring task, using the
     # Wiener filter
-    blurred_noised = add_noise(blur(img, sigma=5))
+    blurred_noised = add_noise(blur(img, sigma=3))
     deblurred = simple_deblur(blurred_noised)
     show_rgb_channels(blurred_noised, 'Blurred image with noise')
     show_rgb_channels(deblurred, 'Deblurred image')
