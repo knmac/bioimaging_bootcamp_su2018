@@ -171,14 +171,6 @@ def simple_deblur(blurred_noised):
     Returns:
         Deblurred image
     """
-    # psf = np.ones((5, 5)) / 25
-    # deblurred = []
-    # for i in range(3):
-        # img = blurred_noised[..., i]
-        # img = signal.convolve2d(img, psf, 'same')
-        # img += 0.1 * img.std() * np.random.standard_normal(img.shape)
-        # deblurred += [restoration.wiener(img, psf, 1100)]
-    # return np.dstack(deblurred)
     img = color.rgb2gray(blurred_noised)
     psf = np.ones((5, 5)) / 25
     img = signal.convolve2d(img, psf, 'same')
@@ -217,20 +209,20 @@ def main():
 
     # Load one of these sample image, show different color channels.
     img = load_image(args.input_fname)
-    # img = (skimage.transform.rescale(img, 0.5) * 255).astype(np.uint8)
     show_custom_channels(img, color_space='rgb', title='Input image')
 
     # Zoom in and show a small window to see triplet of color values for a
     # 64x64 (or so) window
-    zoomed = zoom_in(img, img.shape[0] // 2, img.shape[1] // 2)
+    zoomed = zoom_in(img, img.shape[0] // 2, img.shape[1] // 2,
+                     height=500, width=500)
     show_custom_channels(zoomed, color_space='rgb', title='Zoomed-in window')
 
     # Separate H&E color stain channels from the image
-    show_custom_channels(img, color_space='hed',
+    show_custom_channels(zoomed, color_space='hed',
                          title='Immunohistochemical staining colors separation')
 
     # Add noise and do a simple denoising task
-    noised = add_noise(img, sigma=9)
+    noised = add_noise(zoomed, sigma=9)
     denoised = simple_denoise(noised, kernel_size=3)
     show_custom_channels(noised, color_space='hed',
                          title='Image with Gaussian noise')
@@ -239,7 +231,7 @@ def main():
 
     # Apply blurring and add noise and do a simple deblurring task, using the
     # Wiener filter
-    blurred_noised = add_noise(blur(img, block_size=9), sigma=9)
+    blurred_noised = add_noise(blur(zoomed, block_size=9), sigma=9)
     deblurred = simple_deblur(blurred_noised)
     show_custom_channels(blurred_noised, color_space='hed',
                          title='Blurred image with noise')
