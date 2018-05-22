@@ -99,17 +99,22 @@ def zoom_in(img, top, left, height=64, width=64):
     return img[top:top+height, left:left+width, :]
 
 
-def add_noise(img):
+def add_noise(img, sigma=5):
     """Add Gaussian noise to image
 
     Args:
         img: image to add noise to
+        sigma: standard deviation for gaussian noise
 
     Returns:
         noised image. Out-of-range values are clipped
     """
-    noise = np.random.normal(0, 10, img.shape)
-    return (img + noise).astype(np.uint8)
+    noised = np.copy(img).astype(float)
+    gauss = np.random.normal(0, sigma, np.shape(img))
+
+    # Additive Noise
+    noised = np.clip(np.round(gauss + noised), 0, 255)
+    return np.uint8(noised)
 
 
 def simple_denoise(noised, kernel_size=3):
@@ -128,17 +133,33 @@ def simple_denoise(noised, kernel_size=3):
     return np.dstack(denoised)
 
 
-def blur(img, sigma=1):
+def blur(img, mode='box', block_size=3):
     """Blur an image with Gaussian filter
 
     Args:
         img: input image
-        sigma: standard deviation for Gaussian kernel
+        mode: blurring mode, either `box`, `gaussian`, or `motion`
+        block_size: size of kernel
 
     Returns:
         Blurred image
     """
-    return ndimage.gaussian_filter(img, sigma=sigma)
+    assert mode in ['box', 'gaussian', 'motion']
+
+    dummy = np.copy(img)
+    if mode == 'box':
+        h = np.ones((block_size, block_size)) / block_size ** 2
+    elif mode == 'gaussian':
+        h = signal.gaussian(block_size, block_size / 3).reshape(block_size, 1)
+        h = np.dot(h, h.transpose())
+        h /= np.sum(h)
+    elif mode == 'motion':
+        h = np.eye(block_size) / block_size
+
+    blurred = []
+    for i in range(3):
+        blurred += [signal.convolve2d(dummy[..., i], h, mode='valid')]
+    return np.uint8(np.dstack(blurred))
 
 
 def simple_deblur(blurred_noised):
@@ -150,14 +171,20 @@ def simple_deblur(blurred_noised):
     Returns:
         Deblurred image
     """
+    # psf = np.ones((5, 5)) / 25
+    # deblurred = []
+    # for i in range(3):
+        # img = blurred_noised[..., i]
+        # img = signal.convolve2d(img, psf, 'same')
+        # img += 0.1 * img.std() * np.random.standard_normal(img.shape)
+        # deblurred += [restoration.wiener(img, psf, 1100)]
+    # return np.dstack(deblurred)
+    img = color.rgb2gray(blurred_noised)
     psf = np.ones((5, 5)) / 25
-    deblurred = []
-    for i in range(3):
-        img = blurred_noised[..., i]
-        img = signal.convolve2d(img, psf, 'same')
-        img += 0.1 * img.std() * np.random.standard_normal(img.shape)
-        deblurred += [restoration.wiener(img, psf, 1100)]
-    return np.dstack(deblurred)
+    img = signal.convolve2d(img, psf, 'same')
+    img += 0.1 * img.std() * np.random.standard_normal(img.shape)
+    deblurred = restoration.wiener(img, psf, 1100)
+    return np.dstack([deblurred]*3)
 
 
 def detect_cell_boundary(img):
@@ -203,7 +230,7 @@ def main():
                          title='Immunohistochemical staining colors separation')
 
     # Add noise and do a simple denoising task
-    noised = add_noise(img)
+    noised = add_noise(img, sigma=9)
     denoised = simple_denoise(noised, kernel_size=3)
     show_custom_channels(noised, color_space='hed',
                          title='Image with Gaussian noise')
@@ -212,7 +239,7 @@ def main():
 
     # Apply blurring and add noise and do a simple deblurring task, using the
     # Wiener filter
-    blurred_noised = add_noise(blur(img, sigma=3))
+    blurred_noised = add_noise(blur(img, block_size=9), sigma=9)
     deblurred = simple_deblur(blurred_noised)
     show_custom_channels(blurred_noised, color_space='hed',
                          title='Blurred image with noise')
