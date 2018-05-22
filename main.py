@@ -6,14 +6,11 @@ from __future__ import division
 
 import os
 import numpy as np
-import skimage.io
-import scipy.signal
-import scipy.ndimage
-import skimage.restoration
-import skimage.transform
-import skimage.color
 import matplotlib.pyplot as plt
+import argparse
 
+from skimage import io, restoration, transform, color, data
+from scipy import signal, ndimage
 from matplotlib.colors import LinearSegmentedColormap
 
 
@@ -21,45 +18,65 @@ def load_image(fname):
     """Load one of the samples images and show different color channels
 
     Args:
-        fname: filename (or path) of the image
+        fname: filename (or path) of the image. Will load a default image from
+            skimage immunohistochemistry if empty.
 
     Returns:
         img: loaded image
     """
-    assert os.path.exists(fname), '{} not found'.format(fname)
-    img = skimage.io.imread(fname)
+    if fname is not None:
+        assert os.path.exists(fname), '{} not found'.format(fname)
+        img = io.imread(fname)
+    else:
+        img = data.immunohistochemistry()
     return img
 
 
-def show_rgb_channels(img, title=''):
-    """Show and image with its three RGB channels
+def show_custom_channels(img, color_space, title=''):
+    """Show image with color space of choice
 
     Args:
         img: the input image
+        color_space: color space to show images, either `rgb` or `hed`
         title: title for the plot (optional)
     """
-    # allocate memory for 3 channels
-    r_chn = np.zeros(img.shape, dtype=np.uint8)
-    g_chn = np.zeros(img.shape, dtype=np.uint8)
-    b_chn = np.zeros(img.shape, dtype=np.uint8)
+    assert color_space in ['rgb', 'hed'], \
+            'Unsupported color space. Must be either `rgb` or `hed`'
 
-    # extract data from each channel
-    r_chn[..., 0] = img[..., 0]
-    g_chn[..., 1] = img[..., 1]
-    b_chn[..., 2] = img[..., 2]
+    if color_space == 'rgb':
+        # allocate memory for 3 channels
+        r_chn = np.zeros(img.shape, dtype=np.uint8)
+        g_chn = np.zeros(img.shape, dtype=np.uint8)
+        b_chn = np.zeros(img.shape, dtype=np.uint8)
+
+        # extract data from each channel
+        r_chn[..., 0] = img[..., 0]
+        g_chn[..., 1] = img[..., 1]
+        b_chn[..., 2] = img[..., 2]
+
+        img_lst = [img, r_chn, g_chn, b_chn]
+        cmap_lst = [None, None, None, None]
+        title_lst = ['Original image', 'R channel', 'G channel', 'B channel']
+    elif color_space == 'hed':
+        # Create an artificial color close to the orginal one
+        cmap_hema = LinearSegmentedColormap.from_list('mycmap', ['white', 'navy'])
+        cmap_dab = LinearSegmentedColormap.from_list('mycmap', ['white',
+                                                     'saddlebrown'])
+        cmap_eosin = LinearSegmentedColormap.from_list('mycmap', ['darkviolet',
+                                                       'white'])
+
+        hed = color.rgb2hed(img)
+
+        img_lst = [img, hed[..., 0], hed[..., 1], hed[..., 2]]
+        cmap_lst = [None, cmap_hema, cmap_eosin, cmap_dab]
+        title_lst = ['Original image', 'Hematoxylin', 'Eosin', 'DAB']
 
     # plot the original image and its 3 channels
-    _, axes = plt.subplots(1, 4)
-    axes[0].imshow(img)
-    axes[1].imshow(r_chn)
-    axes[2].imshow(g_chn)
-    axes[3].imshow(b_chn)
-
-    # set xlabel
-    axes[0].set_xlabel('original')
-    axes[1].set_xlabel('R channel')
-    axes[2].set_xlabel('G channel')
-    axes[3].set_xlabel('B channel')
+    fig, axes = plt.subplots(1, 4, figsize=(15, 4), sharex=True, sharey=True)
+    for i in range(4):
+        axes[i].imshow(img_lst[i], cmap_lst[i])
+        axes[i].set_title(title_lst[i])
+        axes[i].axis('off')
 
     plt.suptitle(title)
     pass
@@ -80,42 +97,6 @@ def zoom_in(img, top, left, height=64, width=64):
     assert top >= 0 and top+height <= H, 'invalid top: {}'.format(top)
     assert left >= 0 and left+width <= W, 'invalid left: {}'.format(left)
     return img[top:top+height, left:left+width, :]
-
-
-def show_hed_channels(img, title=''):
-    """Separate H&E color stain channels from the image
-
-    Args:
-        img: input image
-        title: title for the plot (optional)
-
-    Returns:
-        hed: image converted from RGB to HED channels
-    """
-    # Create an artificial color close to the orginal one
-    cmap_hema = LinearSegmentedColormap.from_list('mycmap', ['white', 'navy'])
-    cmap_dab = LinearSegmentedColormap.from_list('mycmap', ['white',
-                                                 'saddlebrown'])
-    cmap_eosin = LinearSegmentedColormap.from_list('mycmap', ['darkviolet',
-                                                   'white'])
-
-    hed = skimage.color.rgb2hed(img)
-
-    # plot the original image and its 3 channels
-    _, axes = plt.subplots(1, 4)
-    axes[0].imshow(img)
-    axes[1].imshow(hed[..., 0], cmap=cmap_hema)
-    axes[2].imshow(hed[..., 1], cmap=cmap_eosin)
-    axes[3].imshow(hed[..., 2], cmap=cmap_dab)
-
-    # set xlabel
-    axes[0].set_xlabel('original')
-    axes[1].set_xlabel('Hematoxylin')
-    axes[2].set_xlabel('Eosin')
-    axes[3].set_xlabel('DAB')
-
-    plt.suptitle(title)
-    return hed
 
 
 def add_noise(img):
@@ -143,7 +124,7 @@ def simple_denoise(noised, kernel_size=3):
     """
     denoised = []
     for i in range(3):
-        denoised += [scipy.signal.medfilt2d(noised[..., i], kernel_size)]
+        denoised += [signal.medfilt2d(noised[..., i], kernel_size)]
     return np.dstack(denoised)
 
 
@@ -157,7 +138,7 @@ def blur(img, sigma=1):
     Returns:
         Blurred image
     """
-    return scipy.ndimage.gaussian_filter(img, sigma=sigma)
+    return ndimage.gaussian_filter(img, sigma=sigma)
 
 
 def simple_deblur(blurred_noised):
@@ -173,9 +154,9 @@ def simple_deblur(blurred_noised):
     deblurred = []
     for i in range(3):
         img = blurred_noised[..., i]
-        img = scipy.signal.convolve2d(img, psf, 'same')
+        img = signal.convolve2d(img, psf, 'same')
         img += 0.1 * img.std() * np.random.standard_normal(img.shape)
-        deblurred += [skimage.restoration.wiener(img, psf, 1100)]
+        deblurred += [restoration.wiener(img, psf, 1100)]
     return np.dstack(deblurred)
 
 
@@ -191,35 +172,52 @@ def compute_cell_size():
     return
 
 
+def parse_args():
+    """Parse input arguments
+    """
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-i', '--input_fname', type=str,
+                        help='path to sample image')
+    args = parser.parse_args()
+    return args
+
+
 def main():
     """Main function
     """
+    # parse input arguments
+    args = parse_args()
+
     # Load one of these sample image, show different color channels.
-    img = load_image(os.path.join('samples', 'IMG_6562.JPG'))
+    img = load_image(args.input_fname)
     # img = (skimage.transform.rescale(img, 0.5) * 255).astype(np.uint8)
-    show_rgb_channels(img, title='Input image')
+    show_custom_channels(img, color_space='rgb', title='Input image')
 
     # Zoom in and show a small window to see triplet of color values for a
     # 64x64 (or so) window
-    zoomed = zoom_in(img, 1000, 1000)
-    show_rgb_channels(zoomed, title='Zoomed-in window')
+    zoomed = zoom_in(img, img.shape[0] // 2, img.shape[1] // 2)
+    show_custom_channels(zoomed, color_space='rgb', title='Zoomed-in window')
 
     # Separate H&E color stain channels from the image
-    img_hed = show_hed_channels(img, title='Immunohistochemical staining '
-                                           'colors separation')
+    show_custom_channels(img, color_space='hed',
+                         title='Immunohistochemical staining colors separation')
 
     # Add noise and do a simple denoising task
     noised = add_noise(img)
     denoised = simple_denoise(noised, kernel_size=3)
-    show_rgb_channels(noised, 'Image with Gaussian noise')
-    show_rgb_channels(denoised, 'Image denoised with Median filter')
+    show_custom_channels(noised, color_space='hed',
+                         title='Image with Gaussian noise')
+    show_custom_channels(denoised, color_space='hed',
+                         title='Image denoised with Median filter')
 
     # Apply blurring and add noise and do a simple deblurring task, using the
     # Wiener filter
     blurred_noised = add_noise(blur(img, sigma=3))
     deblurred = simple_deblur(blurred_noised)
-    show_rgb_channels(blurred_noised, 'Blurred image with noise')
-    show_rgb_channels(deblurred, 'Deblurred image')
+    show_custom_channels(blurred_noised, color_space='hed',
+                         title='Blurred image with noise')
+    show_custom_channels(deblurred, color_space='hed',
+                         title='Deblurred image')
 
     # Detect cell boundary and overlay the results on images
 
