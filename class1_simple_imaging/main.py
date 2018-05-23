@@ -27,7 +27,9 @@ def main():
     # Separate H&E color stain channels from the image
     channel_lst, cmap_lst = show_custom_channels(
         zoomed, color_space='hed', title='Immunohistochemical staining colors separation')
-    sel_chn = np.copy(channel_lst[1])  # select eosin channel for processing
+
+    # Select eosin channel for processing
+    sel_chn = np.copy(channel_lst[1])
     sel_cmap = cmap_lst[1]
 
     # Add noise and do a simple denoising task
