@@ -188,8 +188,8 @@ def simple_deblur(blurred_noised):
     """
     img = np.copy(blurred_noised)
     psf = np.ones((5, 5)) / 25
-    img = signal.convolve2d(img, psf, 'same')
-    img += 0.1 * img.std() * np.random.standard_normal(img.shape)
+    # img = signal.convolve2d(img, psf, 'same')
+    # img += 0.1 * img.std() * np.random.standard_normal(img.shape)
     deblurred = restoration.wiener(img, psf, 1100)
     return deblurred
 
